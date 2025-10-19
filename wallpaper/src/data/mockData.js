@@ -97,4 +97,46 @@ export const mockWallpapers = [
   }
 ];
 
+// Simple mock API service simulating backend fetches and delay
+export const api = {
+  async getTrending() {
+    await new Promise(r => setTimeout(r, 250));
+    return mockWallpapers.slice(0, 8);
+  },
+  async getAll({ category = 'All', page = 1, pageSize = 12, query = '' } = {}) {
+    await new Promise(r => setTimeout(r, 250));
+    let list = [...mockWallpapers];
+    if (category && category !== 'All') {
+      list = list.filter(w => w.category === category);
+    }
+    if (query) {
+      const q = query.toLowerCase();
+      list = list.filter(w =>
+        w.title.toLowerCase().includes(q) ||
+        w.category.toLowerCase().includes(q) ||
+        w.tags.some(t => t.toLowerCase().includes(q))
+      );
+    }
+    const start = (page - 1) * pageSize;
+    const end = start + pageSize;
+    return {
+      items: list.slice(start, end),
+      total: list.length,
+      hasMore: end < list.length,
+    };
+  },
+  async getById(id) {
+    await new Promise(r => setTimeout(r, 150));
+    return mockWallpapers.find(w => String(w.id) === String(id)) || null;
+  },
+  async getRelated(id) {
+    await new Promise(r => setTimeout(r, 150));
+    const current = mockWallpapers.find(w => String(w.id) === String(id));
+    if (!current) return [];
+    return mockWallpapers
+      .filter(w => w.id !== current.id && (w.category === current.category || w.tags.some(t => current.tags.includes(t))))
+      .slice(0, 8);
+  }
+};
+
 export const categories = ["All", "Nature", "Abstract", "Cars", "Anime"];
