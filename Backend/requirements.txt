@@ -1,0 +1,28 @@
+# FastAPI and Server
+fastapi
+uvicorn[standard]
+
+# Database (MongoDB)
+# motor is the async driver for MongoDB
+motor
+
+# Pymongo is a dependency of motor, adding srv for Atlas connections later
+pymongo[srv]
+
+passlib==1.7.4
+bcrypt==3.2.0
+python-jose[cryptography]
+
+# Google Drive API
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib
+
+# Environment Variables
+python-dotenv
+
+# Data Validation
+# Still using Pydantic V1 to avoid the Rust compilation requirement
+pydantic<2
+email-validator
+python-multipart
