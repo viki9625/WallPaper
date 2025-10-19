@@ -6,7 +6,8 @@ const AllWallpapersPage = ({
   selectedCategory,
   categories,
   onCategoryChange,
-  onWallpaperClick 
+  onWallpaperClick,
+  loading = false
 }) => {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -44,13 +45,20 @@ const AllWallpapersPage = ({
         </div>
         
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {wallpapers.map(wallpaper => (
-            <WallpaperCard
-              key={wallpaper.id}
-              wallpaper={wallpaper}
-              onClick={() => onWallpaperClick(wallpaper)}
-            />
-          ))}
+          {loading ? (
+            // Loading skeleton
+            Array.from({ length: 12 }).map((_, idx) => (
+              <div key={idx} className="aspect-video bg-gray-200 dark:bg-gray-800 rounded-xl animate-pulse"></div>
+            ))
+          ) : (
+            wallpapers.map(wallpaper => (
+              <WallpaperCard
+                key={wallpaper.id}
+                wallpaper={wallpaper}
+                onClick={() => onWallpaperClick(wallpaper)}
+              />
+            ))
+          )}
         </div>
       </section>
     </div>

@@ -1,14 +1,30 @@
 import React from 'react';
-import { Download, TrendingUp, Sparkles } from 'lucide-react';
+import { Download, TrendingUp, Sparkles, Database } from 'lucide-react';
 import WallpaperCard from '../components/WallpaperCard';
+import { wallpapersApi } from '../services/api';
 
 const HomePage = ({ 
   categories, 
   trendingWallpapers, 
   onCategoryClick, 
   onViewAllClick,
-  onWallpaperClick 
+  onWallpaperClick,
+  loading = false
 }) => {
+  
+  const handleSeedData = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/seed-data', {
+        method: 'POST'
+      });
+      const result = await response.json();
+      console.log('Seed data result:', result);
+      alert('Database seeded successfully! Refresh the page to see the data.');
+    } catch (error) {
+      console.error('Error seeding data:', error);
+      alert('Error seeding data. Check console for details.');
+    }
+  };
   return (
     <div>
       {/* Hero Section - Banner */}
@@ -51,6 +67,14 @@ const HomePage = ({
                 
                 <button className="px-8 py-4 bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-xl font-semibold text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 border-2 border-gray-200 dark:border-gray-700">
                   Learn More
+                </button>
+                
+                <button 
+                  onClick={handleSeedData}
+                  className="px-8 py-4 bg-green-600 text-white rounded-xl font-semibold text-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300 flex items-center space-x-2"
+                >
+                  <Database size={20} />
+                  <span>Seed Database</span>
                 </button>
               </div>
               
@@ -158,7 +182,7 @@ const HomePage = ({
           >
             <span className="flex items-center justify-center space-x-2">
               <Download size={20} />
-              <span>Download Now</span>
+              <span>Browse & Download</span>
             </span>
           </button>
         </div>
@@ -189,20 +213,29 @@ const HomePage = ({
           </div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {trendingWallpapers.map((wallpaper, idx) => (
-              <div key={wallpaper.id} className="relative">
-                {/* Trending badge */}
-                {idx < 3 && (
-                  <div className="absolute -top-2 -left-2 z-10 bg-gradient-to-r from-red-500 to-pink-500 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg">
-                    #{idx + 1} Trending
-                  </div>
-                )}
-                <WallpaperCard
-                  wallpaper={wallpaper}
-                  onClick={() => onWallpaperClick(wallpaper)}
-                />
-              </div>
-            ))}
+            {loading ? (
+              // Loading skeleton
+              Array.from({ length: 8 }).map((_, idx) => (
+                <div key={idx} className="relative">
+                  <div className="aspect-video bg-gray-200 dark:bg-gray-800 rounded-xl animate-pulse"></div>
+                </div>
+              ))
+            ) : (
+              trendingWallpapers.map((wallpaper, idx) => (
+                <div key={wallpaper.id} className="relative">
+                  {/* Trending badge */}
+                  {idx < 3 && (
+                    <div className="absolute -top-2 -left-2 z-10 bg-gradient-to-r from-red-500 to-pink-500 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg">
+                      #{idx + 1} Trending
+                    </div>
+                  )}
+                  <WallpaperCard
+                    wallpaper={wallpaper}
+                    onClick={() => onWallpaperClick(wallpaper)}
+                  />
+                </div>
+              ))
+            )}
           </div>
           
           <div className="text-center mt-8 md:hidden">

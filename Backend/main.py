@@ -1,8 +1,7 @@
 # main.py
 # DESCRIPTION:
-# This is the final, production-ready backend code. It uses the correct Google
-# authentication flow and handles file uploads entirely in memory to avoid
-# disk-related errors.
+# This version is updated to save and retrieve the full, direct Google Drive
+# image URL instead of just the file ID.
 
 import os
 import hashlib
@@ -19,13 +18,14 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from fastapi.middleware.cors import CORSMiddleware
 
 # Google Drive API Imports
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload # <-- Updated for in-memory uploads
+from googleapiclient.http import MediaIoBaseUpload
 from io import BytesIO
 
 # --- Configuration ---
@@ -37,10 +37,9 @@ ALGORITHM = os.getenv("ALGORITHM")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES"))
 GOOGLE_DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID")
 
-# Google Drive API Scopes
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
 
-# --- Database Setup (MongoDB with Motor) ---
+# --- Database Setup ---
 client = motor.motor_asyncio.AsyncIOMotorClient(MONGO_DETAILS)
 database = client.chitrashala
 user_collection = database.get_collection("users")
@@ -81,12 +80,8 @@ class PyObjectId(ObjectId):
     def __modify_schema__(cls, field_schema):
         field_schema.update(type="string")
 
-class UserBase(BaseModel):
-    email: EmailStr
-
-class UserCreate(UserBase):
-    password: str
-
+class UserBase(BaseModel): email: EmailStr
+class UserCreate(UserBase): password: str
 class UserInDB(UserBase):
     id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
     role: str = "user"
@@ -95,13 +90,8 @@ class UserInDB(UserBase):
         orm_mode = True
         allow_population_by_field_name = True
 
-class UserAuth(UserInDB):
-    hashed_password: str
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-
+class UserAuth(UserInDB): hashed_password: str
+class Token(BaseModel): access_token: str; token_type: str
 class CategorySchema(BaseModel):
     id: PyObjectId = Field(default_factory=PyObjectId, alias="_id")
     name: str
@@ -111,13 +101,10 @@ class CategorySchema(BaseModel):
         allow_population_by_field_name = True
 
 class WallpaperPublic(BaseModel):
-    id: str
-    title: str
-    description: Optional[str] = None
-    category_name: str
-    likes_count: int
-    download_count: int
-    google_drive_file_id: str
+    id: str; title: str; description: Optional[str] = None; category_name: str
+    likes_count: int; download_count: int
+    # CHANGED: The field now represents the full URL
+    google_drive_file_url: str
 
 class WallpaperAdmin(WallpaperPublic):
     upload_date: datetime
@@ -161,9 +148,18 @@ async def get_current_admin_user(current_user: UserAuth = Depends(get_current_us
     return current_user
 
 # --- FastAPI App Initialization ---
-app = FastAPI(title="Chitrashala API with Google Drive", version="3.1-final")
+app = FastAPI(title="Chitrashala API with Google Drive", version="3.2-full-links")
 
-# --- API Endpoints (Authentication, Users, Public Wallpapers, User Actions) ---
+# --- CORS Configuration ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# --- API Endpoints ---
 @app.post("/users/", response_model=UserInDB, tags=["Authentication"], summary="Register a new user", status_code=status.HTTP_201_CREATED)
 async def register_user(user: UserCreate):
     if await user_collection.find_one({"email": user.email}):
@@ -199,7 +195,7 @@ async def get_all_wallpapers(skip: int = 0, limit: int = 50):
             category_name=category["name"] if category else "Uncategorized",
             likes_count=len(wallpaper.get("likes", [])),
             download_count=wallpaper.get("download_count", 0),
-            google_drive_file_id=wallpaper["google_drive_file_id"]
+            google_drive_file_url=wallpaper["google_drive_file_url"] # CHANGED
         ))
     return response
 
@@ -208,7 +204,7 @@ async def get_wallpapers_by_category(category_name: str, skip: int = 0, limit: i
     category = await category_collection.find_one({"name": {"$regex": f"^{category_name}$", "$options": "i"}})
     if not category:
         raise HTTPException(status_code=404, detail=f"Category '{category_name}' not found")
-    
+
     wallpapers_cursor = wallpaper_collection.find({"category_id": category["_id"]}).sort("upload_date", -1).skip(skip).limit(limit)
     response = []
     async for wallpaper in wallpapers_cursor:
@@ -219,7 +215,7 @@ async def get_wallpapers_by_category(category_name: str, skip: int = 0, limit: i
             category_name=category["name"],
             likes_count=len(wallpaper.get("likes", [])),
             download_count=wallpaper.get("download_count", 0),
-            google_drive_file_id=wallpaper["google_drive_file_id"]
+            google_drive_file_url=wallpaper["google_drive_file_url"]
         ))
     return response
 
@@ -234,14 +230,14 @@ async def like_wallpaper(wallpaper_id: str, current_user: UserAuth = Depends(get
     wallpaper = await wallpaper_collection.find_one({"_id": wallpaper_id_obj})
     if not wallpaper:
         raise HTTPException(status_code=404, detail="Wallpaper not found")
-    
+
     if user_id_obj in wallpaper.get("likes", []):
         await wallpaper_collection.update_one({"_id": wallpaper_id_obj}, {"$pull": {"likes": user_id_obj}})
         message = "Wallpaper unliked"
     else:
         await wallpaper_collection.update_one({"_id": wallpaper_id_obj}, {"$addToSet": {"likes": user_id_obj}})
         message = "Wallpaper liked"
-        
+
     return {"status": "success", "message": message}
 
 @app.post("/wallpapers/{wallpaper_id}/download", tags=["Wallpapers"], summary="Increment download count for a wallpaper")
@@ -250,51 +246,18 @@ async def increment_download_count(wallpaper_id: str):
         wallpaper_id_obj = ObjectId(wallpaper_id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid Wallpaper ID format")
-        
+
     result = await wallpaper_collection.update_one(
         {"_id": wallpaper_id_obj},
         {"$inc": {"download_count": 1}}
     )
-    
+
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Wallpaper not found")
-        
+
     return {"status": "success", "message": "Download count incremented"}
 
 # --- ADMIN Endpoints ---
-@app.get("/admin/wallpapers/", response_model=List[WallpaperAdmin], tags=["Admin"], summary="Get all wallpapers with full details (for admin)")
-async def get_all_wallpapers_admin(current_admin: UserAuth = Depends(get_current_admin_user)):
-    wallpapers_cursor = wallpaper_collection.find().sort("upload_date", -1)
-    response = []
-    async for wallpaper in wallpapers_cursor:
-        category = await category_collection.find_one({"_id": wallpaper["category_id"]})
-        response.append(WallpaperAdmin(
-            id=str(wallpaper["_id"]),
-            title=wallpaper["title"],
-            description=wallpaper.get("description"),
-            category_name=category["name"] if category else "Uncategorized",
-            likes_count=len(wallpaper.get("likes", [])),
-            download_count=wallpaper.get("download_count", 0),
-            google_drive_file_id=wallpaper["google_drive_file_id"],
-            upload_date=wallpaper["upload_date"],
-            category_id=str(wallpaper["category_id"])
-        ))
-    return response
-
-@app.post("/admin/categories/", response_model=CategorySchema, tags=["Admin"], summary="Create a new category", status_code=status.HTTP_201_CREATED)
-async def create_category(name: str = Form(...), current_admin: UserAuth = Depends(get_current_admin_user)):
-    if await category_collection.find_one({"name": name}):
-        raise HTTPException(status_code=400, detail="Category already exists")
-    new_category = {"name": name}
-    result = await category_collection.insert_one(new_category)
-    created_cat = await category_collection.find_one({"_id": result.inserted_id})
-    return created_cat
-
-@app.get("/admin/categories/", response_model=List[CategorySchema], tags=["Admin"], summary="Get all existing categories")
-async def get_all_categories(current_admin: UserAuth = Depends(get_current_admin_user)):
-    categories = await category_collection.find().to_list(1000)
-    return categories
-
 @app.post("/admin/upload/", tags=["Admin"], summary="Upload a new wallpaper to Google Drive")
 async def upload_wallpaper_to_drive(
     title: str = Form(...),
@@ -322,32 +285,36 @@ async def upload_wallpaper_to_drive(
         image_bytes = await image.read()
         
         def blocking_upload():
-            # Use BytesIO to handle the file in memory
             fh = BytesIO(image_bytes)
-            media = MediaIoBaseUpload(
-                fh,
-                mimetype=image.content_type,
-                resumable=True
-            )
+            media = MediaIoBaseUpload(fh, mimetype=image.content_type, resumable=True)
             
-            file = service.files().create(
-                body=file_metadata,
-                media_body=media,
-                fields='id'
-            ).execute()
-            return file.get('id')
+            file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+            
+            # ** NEW CHANGE HERE **
+            # After getting the ID, make the file public and construct the direct link
+            file_id = file.get('id')
+            # FIX: Use the correct role 'reader' to make the file publicly viewable
+            service.permissions().create(fileId=file_id, body={'role': 'reader', 'type': 'anyone'}).execute()
+            
+            # This URL format is for direct image viewing/embedding
+            return f"https://drive.google.com/uc?export=view&id={file_id}"
 
-        google_drive_file_id = await run_in_threadpool(blocking_upload)
+        google_drive_file_url = await run_in_threadpool(blocking_upload)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to upload to Google Drive: {e}")
 
     new_wallpaper = {
         "title": title, "description": description, "category_id": category_obj_id,
-        "google_drive_file_id": google_drive_file_id,
+        "google_drive_file_url": google_drive_file_url, # CHANGED: Save the full URL
         "likes": [], "download_count": 0,
         "upload_date": datetime.now(timezone.utc)
     }
     result = await wallpaper_collection.insert_one(new_wallpaper)
-    return {"status": "success", "message": "Wallpaper uploaded", "wallpaper_id": str(result.inserted_id), "google_drive_file_id": google_drive_file_id}
+    return {"status": "success", "message": "Wallpaper uploaded", "wallpaper_id": str(result.inserted_id), "google_drive_file_url": google_drive_file_url}
+
+@app.get("/categories/", response_model=List[CategorySchema], tags=["Wallpapers"], summary="Get all existing categories (public)")
+async def get_all_categories_public():
+    categories = await category_collection.find().to_list(1000)
+    return categories
 

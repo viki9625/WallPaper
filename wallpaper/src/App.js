@@ -1,41 +1,30 @@
 import React, { useEffect, useState } from 'react';
 import { ThemeProvider } from './context/ThemeContext';
+import { AuthProvider } from './context/AuthContext';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import HomePage from './pages/HomePage';
 import AllWallpapersPage from './pages/AllWallpapersPage';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { categories, api } from './data/mockData';
+import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import WallpaperDetailPage from './pages/WallpaperDetailPage';
 import SearchPage from './pages/SearchPage';
+import LoginPage from './pages/LoginPage';
+import { useWallpapers, useCategories } from './hooks/useApi';
 
-const App = () => {
+const AppContent = () => {
+  const navigate = useNavigate();
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const [trendingWallpapers, setTrendingWallpapers] = useState([]);
-  const [wallpapers, setWallpapers] = useState([]);
-
-  useEffect(() => {
-    let isMounted = true;
-    api.getTrending().then(items => {
-      if (isMounted) setTrendingWallpapers(items);
-    });
-    return () => { isMounted = false; };
-  }, []);
-
-  useEffect(() => {
-    let isMounted = true;
-    api.getAll({ category: selectedCategory }).then(result => {
-      if (isMounted) setWallpapers(result.items);
-    });
-    return () => { isMounted = false; };
-  }, [selectedCategory]);
+  const { categories, loading: categoriesLoading } = useCategories();
+  const { wallpapers: trendingWallpapers, loading: trendingLoading } = useWallpapers('All', 0, 8);
+  const { wallpapers, loading: wallpapersLoading } = useWallpapers(selectedCategory, 0, 50);
 
   const handleCategoryClick = (category) => {
     setSelectedCategory(category);
+    navigate('/wallpapers');
   };
 
   const handleViewAllClick = () => {
-    // Intentionally left blank for now; routing handled via navigation/UI
+    navigate('/wallpapers');
   };
 
   const handleWallpaperClick = () => {
@@ -43,47 +32,58 @@ const App = () => {
   };
 
   return (
-    <ThemeProvider>
-      <BrowserRouter>
-        <div className="min-h-screen bg-white dark:bg-gray-950 text-gray-900 dark:text-white transition-colors">
-          <Header
-            onSearchClick={() => {}}
-            onCategoryClick={() => handleCategoryClick('All')}
-            onLogoClick={() => {}}
+    <div className="min-h-screen bg-white dark:bg-gray-950 text-gray-900 dark:text-white transition-colors">
+      <Header
+        onSearchClick={() => navigate('/search')}
+        onCategoryClick={() => handleCategoryClick('All')}
+        onLogoClick={() => navigate('/')}
+      />
+      <main>
+        <Routes>
+          <Route
+            path="/"
+            element={(
+              <HomePage
+                categories={categories}
+                trendingWallpapers={trendingWallpapers}
+                onCategoryClick={handleCategoryClick}
+                onViewAllClick={handleViewAllClick}
+                onWallpaperClick={handleWallpaperClick}
+                loading={trendingLoading}
+              />
+            )}
           />
-          <main>
-            <Routes>
-              <Route
-                path="/"
-                element={(
-                  <HomePage
-                    categories={categories}
-                    trendingWallpapers={trendingWallpapers}
-                    onCategoryClick={handleCategoryClick}
-                    onViewAllClick={handleViewAllClick}
-                    onWallpaperClick={handleWallpaperClick}
-                  />
-                )}
+          <Route
+            path="/wallpapers"
+            element={(
+              <AllWallpapersPage
+                categories={categories}
+                wallpapers={wallpapers}
+                selectedCategory={selectedCategory}
+                onCategoryChange={setSelectedCategory}
+                onWallpaperClick={handleWallpaperClick}
+                loading={wallpapersLoading}
               />
-              <Route
-                path="/wallpapers"
-                element={(
-                  <AllWallpapersPage
-                    categories={categories}
-                    wallpapers={wallpapers}
-                    selectedCategory={selectedCategory}
-                    onCategoryChange={setSelectedCategory}
-                    onWallpaperClick={handleWallpaperClick}
-                  />
-                )}
-              />
-              <Route path="/wallpaper/:id" element={<WallpaperDetailPage />} />
-              <Route path="/search" element={<SearchPage />} />
-            </Routes>
-          </main>
-          <Footer />
-        </div>
-      </BrowserRouter>
+            )}
+          />
+          <Route path="/wallpaper/:id" element={<WallpaperDetailPage />} />
+          <Route path="/search" element={<SearchPage />} />
+          <Route path="/login" element={<LoginPage />} />
+        </Routes>
+      </main>
+      <Footer />
+    </div>
+  );
+};
+
+const App = () => {
+  return (
+    <ThemeProvider>
+      <AuthProvider>
+        <BrowserRouter>
+          <AppContent />
+        </BrowserRouter>
+      </AuthProvider>
     </ThemeProvider>
   );
 };

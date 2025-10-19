@@ -1,10 +1,26 @@
 import React, { useState } from 'react';
-import { Moon, Sun, Search, Menu, Home, Grid } from 'lucide-react';
+import { Moon, Sun, Search, Menu, Home, Grid, User, LogOut } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 const Header = ({ onSearchClick, onCategoryClick, onLogoClick }) => {
   const { isDark, setIsDark } = useTheme();
+  const { user, logout, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+    setUserMenuOpen(false);
+  };
+
+  const handleLogin = () => {
+    navigate('/login');
+    setMobileMenuOpen(false);
+  };
 
   return (
     <header className="sticky top-0 z-50 bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 transition-colors shadow-sm">
@@ -59,6 +75,41 @@ const Header = ({ onSearchClick, onCategoryClick, onLogoClick }) => {
               )}
             </button>
 
+            {/* User Menu */}
+            {isAuthenticated ? (
+              <div className="relative">
+                <button
+                  onClick={() => setUserMenuOpen(!userMenuOpen)}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition flex items-center space-x-2"
+                  aria-label="User menu"
+                >
+                  <User className="text-gray-700 dark:text-gray-300" size={20} />
+                  <span className="hidden md:block text-sm text-gray-700 dark:text-gray-300">
+                    {user?.email}
+                  </span>
+                </button>
+                
+                {userMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1">
+                    <button
+                      onClick={handleLogout}
+                      className="w-full px-4 py-2 text-left text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2"
+                    >
+                      <LogOut size={16} />
+                      <span>Logout</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button
+                onClick={handleLogin}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm font-medium"
+              >
+                Login
+              </button>
+            )}
+
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="md:hidden p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition"
@@ -92,6 +143,15 @@ const Header = ({ onSearchClick, onCategoryClick, onLogoClick }) => {
               <Grid size={18} />
               <span>Categories</span>
             </button>
+            
+            {!isAuthenticated && (
+              <button 
+                onClick={handleLogin}
+                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"
+              >
+                Login
+              </button>
+            )}
           </div>
         )}
       </div>
